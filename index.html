@@ -1,0 +1,1921 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>🏪 シフト表テトリス - 深夜のコンビニ店長日記</title>
+<style>
+  :root {
+    --bg: #fdf9f0;
+    --ink: #222;
+    --line: #b8a98c;
+    --filled: #ffe7b0;
+    --self: #c0f0c0;
+    --active: #fff080;
+    --hint: #cdeefd;
+    --warn: #c43030;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", system-ui, sans-serif;
+    line-height: 1.45;
+    padding: 12px 16px 24px;
+    color: var(--ink);
+    margin: 0;
+    background:
+      linear-gradient(rgba(253, 249, 240, .85), rgba(253, 249, 240, .9)),
+      url("portraits/bg_store.png") center/cover no-repeat fixed,
+      var(--bg);
+  }
+  h1 { font-size: 20px; margin: 0 0 10px; }
+  .wrap { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+  table { border-collapse: collapse; user-select: none; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+  th, td {
+    border: 1px solid var(--line);
+    width: 48px;
+    height: 48px;
+    text-align: center;
+    vertical-align: middle;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    position: relative;
+    letter-spacing: -0.02em;
+  }
+  th { background: #f0e7d2; font-size: 12px; font-weight: 700; height: 28px; }
+  .time { width: 60px; font-weight: 700; background: #f6efdc; font-size: 13px; }
+  .weekend { background: #fbe6e6 !important; }
+  /* 難易度UPで縮んでいく天井ライン */
+  td.blocked, .time.blocked {
+    background: repeating-linear-gradient(45deg, #aaa 0 6px, #888 6px 12px) !important;
+    color: #fff !important;
+    cursor: not-allowed;
+  }
+  /* 落下先プレビュー（ゴースト） */
+  td.ghost {
+    background: rgba(0,0,0,.08) !important;
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,.28);
+    color: rgba(0,0,0,.35);
+  }
+  /* キャラごとの色（filled / active セル共通） */
+  td.c-tanaka    { background: #fff2b0; color: #6b5800; }
+  td.c-yamada    { background: #ffd9e7; color: #8a2e5c; }
+  td.c-sato      { background: #d6c8f0; color: #4a2a8a; }
+  td.c-takahashi { background: #c8eccd; color: #235c30; }
+  td.c-watanabe  { background: #ffd8a8; color: #7a4300; }
+  td.c-tencho    { background: #c8e4f8; color: #1b4d75; }
+  td.active.c-tanaka,
+  td.active.c-yamada,
+  td.active.c-sato,
+  td.active.c-takahashi,
+  td.active.c-watanabe { outline: 3px solid #111; filter: brightness(1.06); }
+
+  /* 顔写真ポップアップ（画面ど真ん中・ドラマチック） */
+  .charPop {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(440px, 92vw);
+    background: #fff7e0;
+    border: 4px solid #2a2a2a;
+    border-radius: 18px;
+    padding: 16px 18px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.45), 6px 6px 0 #2a2a2a;
+    z-index: 1100;
+    display: none;
+    align-items: center;
+    gap: 14px;
+  }
+  .charPop.show { display: flex; animation: popInCenter .32s ease-out; }
+  .charPop.hide { animation: popOutCenter .5s ease-in forwards; }
+  .charPop img.face {
+    width: 108px;
+    height: 108px;
+    object-fit: cover;
+    border-radius: 14px;
+    display: block;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    flex: 0 0 108px;
+  }
+  .charPop .fallbackFace {
+    width: 108px;
+    height: 108px;
+    border-radius: 14px;
+    background: #ffd089;
+    font-size: 60px;
+    line-height: 108px;
+    text-align: center;
+    flex: 0 0 108px;
+  }
+  .charPop .text { flex: 1 1 auto; min-width: 0; }
+  .charPop .name { font-weight: 800; font-size: 17px; margin: 0 0 6px; color: #5a3c00; }
+  .charPop .line { font-size: 15px; line-height: 1.5; color: #222; }
+  @keyframes popInCenter  { from { opacity:0; transform: translate(-50%, -50%) scale(.7); } to { opacity:1; transform: translate(-50%, -50%) scale(1); } }
+  @keyframes popOutCenter { to   { opacity:0; transform: translate(-50%, -50%) scale(1.1); } }
+
+  /* 横長ボーナスのフロート表示 */
+  .scoreFloat {
+    position: fixed;
+    pointer-events: none;
+    font-size: 20px;
+    font-weight: 900;
+    color: #d4720b;
+    text-shadow: 0 1px 0 #fff, 0 0 8px rgba(212,114,11,.4);
+    z-index: 950;
+    animation: floatUp 1.3s ease-out forwards;
+  }
+  @keyframes floatUp {
+    0%   { opacity: 0; transform: translateY(8px) scale(.85); }
+    20%  { opacity: 1; transform: translateY(0) scale(1.1); }
+    100% { opacity: 0; transform: translateY(-60px) scale(1); }
+  }
+
+  /* 初回のルールモーダル */
+  .modalBackdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3000;
+  }
+  .modalBackdrop.hide { display: none; }
+  .modalBox {
+    background: #fff7e0;
+    border: 3px solid #c9b07a;
+    border-radius: 18px;
+    padding: 22px 28px 24px;
+    max-width: 520px;
+    width: 90%;
+    box-shadow: 0 12px 36px rgba(0,0,0,.4);
+  }
+  .modalBox h2 { margin: 0 0 10px; font-size: 22px; }
+  .modalBox pre { margin: 0 0 16px; }
+  .modalBox button {
+    display: block;
+    margin: 0 auto;
+    padding: 10px 24px;
+    font-size: 16px;
+    font-weight: 700;
+    background: #ffd089;
+    border: 2px solid #c9b07a;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .modalBox button:hover { background: #ffc466; }
+  .yen { color: #b87500; font-weight: 800; }
+
+  /* オープニング5コマ漫画 */
+  .mangaBox {
+    background: #fff7e0;
+    border: 3px solid #2a2a2a;
+    border-radius: 14px;
+    padding: 18px 20px 18px;
+    max-width: 760px;
+    width: 94%;
+    box-shadow: 0 12px 36px rgba(0,0,0,.4);
+  }
+  .mangaBox h2 { margin: 0 0 6px; font-size: 22px; text-align: center; }
+  .mangaSub { font-size: 13px; color: #666; text-align: center; margin-bottom: 12px; }
+  .mangaPanels {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .mPanel {
+    background: #fff;
+    border: 2px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 2px 2px 0 #2a2a2a;
+  }
+  .mPanel .pnum {
+    font-size: 11px;
+    color: #888;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .mPanel .pImg {
+    aspect-ratio: 1 / 1;
+    background: #fbeed0;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 56px;
+    line-height: 1;
+    overflow: hidden;
+  }
+  .mPanel .pImg img { width: 100%; height: 100%; object-fit: cover; }
+  .mPanel .pCap {
+    font-size: 11px;
+    line-height: 1.35;
+    margin-top: 6px;
+    color: #222;
+    min-height: 56px;
+  }
+  .mangaBox pre { margin: 8px 0 12px; font-size: 12px; line-height: 1.45; }
+  .mangaBox button {
+    display: block;
+    margin: 0 auto;
+    padding: 10px 28px;
+    font-size: 16px;
+    font-weight: 700;
+    background: #ffd089;
+    border: 2px solid #2a2a2a;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 #2a2a2a;
+  }
+  .mangaBox button:hover { background: #ffc466; }
+  @media (max-width: 720px) {
+    body { padding: 6px 4px 14px; }
+    h1 { font-size: 16px; }
+    .wrap { flex-direction: column; gap: 10px; }
+    .panel { min-width: 0; max-width: none; width: 100%; }
+    /* 盤面: ピクセル固定幅で 12コマ + 左ラベルがビューポートに収まる前提に */
+    table { table-layout: fixed; max-width: 100%; }
+    th, td { width: 26px; height: 28px; font-size: 9px; padding: 0; letter-spacing: -0.05em; min-width: 0; box-sizing: border-box; overflow: hidden; }
+    .time { width: 36px; font-size: 9px; padding: 0; }
+    th { font-size: 7.5px; height: 16px; padding: 0; }
+    button { padding: 11px 12px; font-size: 14px; min-height: 42px; }
+    pre { font-size: 11px; padding: 8px; }
+    .stat, .pieceLine { font-size: 13px; }
+    .charPop {
+      width: min(94vw, 420px);
+      padding: 12px 14px;
+    }
+    .charPop img.face, .charPop .fallbackFace { width: 76px; height: 76px; flex-basis: 76px; line-height: 76px; font-size: 44px; }
+    .charPop .name { font-size: 15px; }
+    .charPop .line { font-size: 13px; }
+    .mangaPanels { grid-template-columns: repeat(2, 1fr); }
+    .mPanel .pImg { font-size: 48px; }
+    .mangaBox.single { padding: 14px 14px 16px; }
+    .pBigImg { font-size: 80px; }
+    .pBigCap { font-size: 14px; }
+    #lineStack { width: min(90vw, 280px); right: 8px; bottom: 8px; }
+    .modalBox { padding: 16px 18px 18px; }
+    .modalBox h2 { font-size: 18px; }
+    .scoreFloat { font-size: 17px; }
+  }
+
+  /* 紙芝居形式（1パネル大表示） */
+  .mangaBox.single { max-width: 520px; }
+  .singlePanel {
+    background: #fff;
+    border: 2px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 10px 12px 14px;
+    box-shadow: 3px 3px 0 #2a2a2a;
+    margin-bottom: 12px;
+  }
+  .singlePanel .pnum {
+    font-size: 12px;
+    color: #888;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .pBigImg {
+    aspect-ratio: 1 / 1;
+    width: 100%;
+    background: #fbeed0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 110px;
+    line-height: 1;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .pBigImg img { width: 100%; height: 100%; object-fit: cover; }
+  .pBigCap {
+    font-size: 15px;
+    line-height: 1.55;
+    color: #222;
+    min-height: 60px;
+    font-weight: 500;
+  }
+  .mangaNav {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .mangaNav button {
+    flex: 1;
+    padding: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    background: #ffd089;
+    border: 2px solid #2a2a2a;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 #2a2a2a;
+    margin: 0;
+  }
+  .mangaNav button#amSkip {
+    background: #ddd;
+    flex: 0 0 80px;
+  }
+  .mangaNav button:hover { background: #ffc466; }
+  .mangaNav button[disabled] {
+    opacity: .35;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  .filled { background: var(--filled); }
+  .self { background: var(--self); font-weight: 700; }
+  .active { outline: 3px solid #111; background: var(--active); }
+  .helpTarget { cursor: crosshair; }
+  .helpTarget:hover { background: #d7f5d7; }
+  .panel { min-width: 290px; max-width: 380px; }
+  button {
+    margin: 2px;
+    padding: 8px 12px;
+    font-size: 14px;
+    border: 1px solid #888;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { background: #fffbe0; }
+  button.on { font-weight: 700; outline: 3px solid #111; background: #fff080; }
+  pre { background: #fff7e0; padding: 10px; white-space: pre-wrap; border-radius: 4px; border: 1px solid var(--line); font-size: 12px; }
+  .small { color: #666; font-size: 13px; }
+  .warn { color: var(--warn); font-weight: 700; }
+
+  /* 店長の独り言（常時表示） */
+  .managerBox {
+    margin-top: 10px;
+    padding: 10px 14px 10px 70px;
+    background: #fff7e0;
+    border: 2px solid #c9b07a;
+    border-radius: 10px;
+    position: relative;
+    min-height: 56px;
+    font-size: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .managerBox::before {
+    content: "";
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: url("portraits/manager.png") center/cover no-repeat, #ffd089;
+    box-shadow: 0 0 0 2px #c9b07a, 0 2px 4px rgba(0,0,0,.15);
+  }
+  .managerBox .who { font-weight: 700; font-size: 12px; color: #8a6a20; margin-bottom: 2px; }
+
+  /* 配置時/消去時の一時セリフ吹き出し（盤面右側） */
+  .bubbleArea {
+    position: relative;
+    min-height: 60px;
+    margin-top: 8px;
+  }
+  .bubble {
+    background: #fff;
+    border: 2px solid #6aa7c8;
+    border-radius: 14px;
+    padding: 8px 12px 8px 50px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    position: relative;
+    box-shadow: 0 1px 3px rgba(0,0,0,.1);
+    animation: fadeIn .25s ease-out;
+  }
+  .bubble.fadeOut { animation: fadeOut .4s ease-in forwards; }
+  .bubble .ico {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 28px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #fff;
+    text-align: center;
+    line-height: 36px;
+    overflow: hidden;
+    box-shadow: 0 0 0 2px #6aa7c8;
+  }
+  .bubble .ico img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .bubble.cheer .ico { box-shadow: 0 0 0 2px #d49b3a; }
+  .bubble .name { font-weight: 700; font-size: 12px; color: #1b5a82; }
+  .bubble.cheer { border-color: #d49b3a; background: #fff7d8; }
+  .bubble.cheer .name { color: #a06b00; }
+
+  /* LINE風通知（右下浮動） */
+  #lineStack {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1000;
+    pointer-events: none;
+  }
+  .lineNotify {
+    background: #00b900;
+    color: #fff;
+    border-radius: 10px;
+    padding: 10px 12px 10px 52px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.25);
+    font-size: 13px;
+    position: relative;
+    animation: slideIn .35s ease-out;
+    pointer-events: auto;
+  }
+  .lineNotify.fadeOut { animation: slideOut .5s ease-in forwards; }
+  .lineNotify .lineIco {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 18px;
+    background: #fff;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    text-align: center;
+    line-height: 36px;
+    overflow: hidden;
+  }
+  .lineNotify .lineIco img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .lineNotify .head { font-size: 11px; opacity: .9; }
+  .lineNotify .name { font-weight: 700; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeOut { to { opacity: 0; transform: translateY(-4px); } }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes slideOut { to { opacity: 0; transform: translateX(40px); } }
+
+  .stat { font-size: 14px; margin: 4px 0; }
+  .stat b { font-weight: 700; }
+  .pieceLine { font-size: 14px; margin: 4px 0; }
+  .pieceEmoji { font-size: 18px; }
+  .dim { color: #888; }
+
+  /* 残り時間バー */
+  #timerBox { margin: 0 0 8px; }
+  .timerRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 800;
+    color: #b03a00;
+    margin-bottom: 4px;
+  }
+  #timerLabel { font-size: 13px; font-weight: 700; color: #555; }
+  .stateChip {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 700;
+    background: #e2f7d8;
+    color: #2a6011;
+    padding: 2px 8px;
+    border-radius: 8px;
+  }
+  .stateChip.over { background: #ffd6d6; color: #b00020; animation: chipBlink 0.8s infinite alternate; }
+  @keyframes chipBlink { from { opacity: 1; } to { opacity: .55; } }
+
+  /* ゲームオーバー時に盤面上に重ねるバナー */
+  .boardWrap { position: relative; display: inline-block; }
+  #gameOverBanner {
+    position: absolute;
+    inset: 0;
+    background: rgba(180, 0, 32, 0.78);
+    color: #fff;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    font-weight: 900;
+    font-size: 32px;
+    text-shadow: 2px 2px 0 #2a0000;
+    z-index: 50;
+    text-align: center;
+    pointer-events: auto;
+    cursor: pointer;
+    user-select: none;
+  }
+  #gameOverBanner.show { display: flex; animation: bannerIn .5s ease-out; }
+  #gameOverBanner small { font-size: 15px; font-weight: 700; margin-top: 10px; }
+  #gameOverBanner .restartBig {
+    margin-top: 14px;
+    padding: 12px 22px;
+    background: #ffd089;
+    color: #2a2a2a;
+    border: 3px solid #2a2a2a;
+    border-radius: 12px;
+    font-size: 17px;
+    font-weight: 900;
+    box-shadow: 4px 4px 0 #2a2a2a;
+  }
+  @keyframes bannerIn { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
+</style>
+</head>
+<body>
+<h1>🏪 シフト表テトリス <span style="font-size:13px;font-weight:normal;color:#666">— 深夜のコンビニ店長日記</span></h1>
+<div class="wrap">
+  <div>
+    <div class="boardWrap">
+      <table id="board"></table>
+      <div id="gameOverBanner" onclick="restart()">
+        🚫 閉店
+        <small>シフトが組めず店長は在庫管理係に</small>
+        <div class="restartBig">🔁 もう一度シフトを組む</div>
+      </div>
+    </div>
+    <p class="small">⌨️ ← → ↓ 移動 / ↑・Space 回転 / Enter 即配置 / R リスタート　🖱 空きマスをクリック=自分が入る</p>
+    <div>
+      <button onclick="move(-1,0)">⬅️</button>
+      <button onclick="move(1,0)">➡️</button>
+      <button onclick="move(0,1)">⬇️</button>
+      <button onclick="rotate()">🔄 回転</button>
+      <button onclick="hardDrop()">⚡ 即配置</button>
+      <button onclick="restart()">🔁 リスタート</button>
+      <button id="muteBtn" onclick="toggleMute()">🔊 音ON</button>
+    </div>
+    <div id="managerBox" class="managerBox">
+      <div class="who">店長の心の声</div>
+      <div id="managerText">今週もよろしく頼むぞ…☕</div>
+    </div>
+    <p id="helpMessage" class="small"></p>
+  </div>
+  <div class="panel">
+    <div id="timerBox">
+      <div class="timerRow"><span id="timerLabel">⏱</span> <span id="timer">3:00</span> <span id="state" class="stateChip">営業中</span></div>
+    </div>
+    <p class="stat">💰 <span id="score">0</span> ／ 💴 <span id="yenTotal" class="yen">¥0</span></p>
+    <p class="stat">☕ 今週ヘルプ <span id="helps">5</span>/5</p>
+
+    <button onclick="openRuleModal()" style="margin-top:8px">📘 ルール</button>
+  </div>
+</div>
+
+<div id="ruleModal" class="modalBackdrop">
+  <div class="modalBox">
+    <h2>🏪 シフト表テトリス</h2>
+    <pre>— 深夜のコンビニ店長日記 —
+
+📅 縦=日付（2週間先・下が今日） / 🕑 横=2時間ごとの時間帯
+✅ 同じ日が全部埋まる → その1日が消え、新しい未来日が上から降りてくる
+⭐ 横長ピースで +10〜+30 ボーナス
+🖱 空きマスをクリックで「自分が入る」(店長権限・残5回 / -50点)
+💴 時給1200円換算で「今月の人件費」と「このペースだと月XX円」を表示
+📖 初めて○○したとき、5コマ漫画が差し込まれます。</pre>
+    <button onclick="closeRuleModal()">▶ シフト組み始める</button>
+  </div>
+</div>
+
+<div id="achieveModal" class="modalBackdrop hide">
+  <div class="mangaBox single">
+    <h2 id="amTitle">🏆</h2>
+    <div class="mangaSub" id="amSub"></div>
+    <div class="singlePanel">
+      <div class="pnum" id="amPnum">PANEL 1 / 5</div>
+      <div class="pBigImg" id="amImg">🏪</div>
+      <div class="pBigCap" id="amCap"></div>
+    </div>
+    <div class="mangaNav">
+      <button id="amPrev" onclick="prevPanel()">◀ 戻る</button>
+      <button id="amSkip" onclick="closeAchievementModal()">スキップ</button>
+      <button id="amNext" onclick="nextPanel()">▶ 次へ</button>
+    </div>
+  </div>
+</div>
+
+<div id="lineStack"></div>
+<div id="charPop" class="charPop"></div>
+
+<script>
+// 横軸 = 時間帯（2時間刻み12スロット）
+const slots = [
+  "00-02","02-04","04-06","06-08",
+  "08-10","10-12","12-14","14-16",
+  "16-18","18-20","20-22","22-24"
+];
+// 縦軸 = 日付（常に14行=2週間先まで表示。1日=月曜開始）
+// startDay = 「いま最下段に表示している日付」。シフト1日消化のたびに +1 され、
+// 上から新しい未来日が降ってくる＝カレンダーが進む。
+let startDay = 1;
+const ROWS = 14;
+function dayAt(y) { return startDay + (ROWS - 1 - y); } // y=ROWS-1 が最下段=startDay
+function dayLabel(y) { return dayAt(y) + "日"; }
+function isWeekendRow(y) {
+  const wd = (dayAt(y) - 1) % 7;  // 0=月,1=火,…,5=土,6=日
+  return wd === 5 || wd === 6;
+}
+const W = slots.length;   // 12
+const H = ROWS;           // 14
+
+// バイト一覧（5人） — mark は盤面の名字表示、emoji は吹き出しfallback、portrait は顔画像
+// cells: x=時間帯(横)、y=日付(縦)。横に長いほど同日の長時間連勤、縦に長いほど複数日連続出勤。
+const pieces = [
+  { name:"田中", mark:"田中", emoji:"🎓", portrait:"portraits/tanaka.png",    cells:[[0,0],[1,0],[2,0],[3,0]] }, // I = 横4=8時間連勤
+  { name:"山田", mark:"山田", emoji:"👶", portrait:"portraits/yamada.png",    cells:[[0,0],[1,0],[0,1],[1,1]] }, // O = 2日連続×4時間
+  { name:"佐藤", mark:"佐藤", emoji:"🌃", portrait:"portraits/sato.png",      cells:[[0,0],[1,0],[2,0],[1,1]] }, // T = 6時間 + 翌日2時間
+  { name:"高橋", mark:"高橋", emoji:"💪", portrait:"portraits/takahashi.png", cells:[[1,0],[2,0],[0,1],[1,1]] }, // Z = ずれ4時間×2日
+  { name:"渡辺", mark:"渡辺", emoji:"😎", portrait:"portraits/watanabe.png",  cells:[[2,0],[0,1],[1,1],[2,1]] }, // J = 2時間 + 翌6時間
+];
+
+// 盤面マーク → 名前 の逆引き（ライン消去時のメンバー特定用）
+const MARK_TO_NAME = { "田中":"田中", "山田":"山田", "佐藤":"佐藤", "高橋":"高橋", "渡辺":"渡辺", "店長":"店長" };
+
+// 名前 → CSSクラス（盤面マスの色分け）
+const NAME_TO_CSS = {
+  "田中":"c-tanaka", "山田":"c-yamada", "佐藤":"c-sato",
+  "高橋":"c-takahashi", "渡辺":"c-watanabe", "店長":"c-tencho"
+};
+
+// 達成アチーブ（初回イベント発生時に1度だけ漫画を差し込む）
+const achievements = new Set();
+let achievementPaused = false;
+let achievementQueue = []; // 同時複数発生したら順次表示
+
+// 達成漫画は「うまくいった時」だけ。1度きり。各エピソード 8パネル×長文captionで読み応え重視。
+// "prologue" だけは特別扱いで起動時に再生し、閉じた後にルールモーダルへ遷移する。
+const ACHIEVE_MANGA = {
+  "prologue": {
+    title: "📺 プロローグ",
+    sub: "ある深夜のコンビニ、ある中年店長、ある異常な指令。",
+    panels: [
+      { img:"portraits/p_1.png",  fallback:"🧑‍💼", caption:"主人公・佐々木44歳、コンビニ歴12年・店長歴2年。月給28万、店長手当1万、残業代ゼロ。地方紙にも本部にも、その名前は載らない。" },
+      { img:"portraits/p_2.png",  fallback:"🌃",   caption:"いつもの深夜2時。レジには佐々木1人、客は雑誌コーナーで立ち読みする会社員が1人だけ。BGMはずっと「いらっしゃいませ」のループ。" },
+      { img:"portraits/p_3.png",  fallback:"📞",   caption:"本部から突然のLINE。「来週から、2週間先までのシフト表を完璧に埋めて運用してください。地区マネージャー命令です」絵文字なし、句点だけが冷たい。" },
+      { img:"portraits/p_4.png",  fallback:"❓",   caption:"佐々木「えっ…2週間先? いつもは1週間先までで精一杯なのに…」スマホを握る手が震える。背中に冷たい汗。" },
+      { img:"portraits/p_5.png",  fallback:"👥",   caption:"うちのバイトは5人。学生の田中、主婦の山田、夜型の佐藤、ベテランの高橋、陽キャの渡辺。みんな、それぞれの人生で精一杯だ。" },
+      { img:"portraits/p_6.png",  fallback:"💥",   caption:"その夜、5人全員から欠勤・遅刻LINE。「子供が熱」「奨学金の督促」「彼女と修羅場」「腰が…」「サラ金返済日です」スマホが地震みたいに振動する。" },
+      { img:"portraits/p_7.png",  fallback:"😩",   caption:"佐々木、バックヤードで頭を抱える。「俺の人生、なんでこんな…」コーヒーは冷め、家には妻からの離婚届。逃げ場が、どこにも無い。" },
+      { img:"portraits/p_8.png",  fallback:"💡",   caption:"そのとき、棚のエナドリと目が合う。「俺がやるしか…ないんだな」缶を握り、プルタブを引く音。コンビニの蛍光灯が、なぜか少し眩しい。" },
+      { img:"portraits/p_9.png",  fallback:"📅",   caption:"突然、頭上から巨大なシフト表が降ってきた。日付の升目、時間帯の升目。色とりどりのピースが、空からゆっくり落ちてくる。" },
+      { img:"portraits/p_10.png", fallback:"⚡",   caption:"佐々木、思わず叫ぶ「これは…シフトテトリス…!」3分間、2週間先のシフトを埋め切れば、人生は変わる。たぶん。変わらないかも。でも、やるしかない。" }
+    ]
+  },
+  "first_clear": {
+    title: "✨ 初めての1日完成",
+    sub: "店長、人生初の達成感。時刻は深夜3時。",
+    panels: [
+      { img:"portraits/m_first_clear_1.png", fallback:"📋",  caption:"深夜3時、最後のコマ「22-24 佐藤」が書き込まれた瞬間、1日のシフトが12コマすべて埋まった。店長の手は、まだ震えている。" },
+      { img:"portraits/m_first_clear_2.png", fallback:"🎓",  caption:"レジでは田中が客に「タバコ番号30番!」と急かされ「廃番です…」と返している。客は怒鳴ったが、田中は微笑みを崩さない。シフトを抜けるわけにはいかない。" },
+      { img:"portraits/m_first_clear_3.png", fallback:"✊",  caption:"バックヤードで、店長が小さくガッツポーズ。「2年やってて、初めて埋まった」涙が、なぜか出てくる。誰もいない空間で、声を殺して笑っていた。" },
+      { img:"portraits/m_first_clear_4.png", fallback:"📱",  caption:"スマホには妻から「今夜も会議?」のLINEが3件、すべて既読のまま。返事をする気力は、もう何ヶ月も湧いていない。" },
+      { img:"portraits/m_first_clear_5.png", fallback:"🍜",  caption:"温いカップ麺を啜りながら「明日も、1日でいいから埋まってほしい」と願う。窓の外、街は寝静まっている。" }
+    ]
+  },
+  "first_combo2": {
+    title: "🔥 2日同時完成（初・連鎖）",
+    sub: "店長、初めての連鎖。なお本部には届かない。",
+    panels: [
+      { img:"portraits/m_first_combo2_1.png", fallback:"🔥",  caption:"金曜と土曜のシフトが同時に完成。「これは…俺、シフトの天才では?」12年で初めて感じた万能感。シフト表が、勝利の証に見える。" },
+      { img:"portraits/m_first_combo2_2.png", fallback:"👏",  caption:"バイトたち「店長すげぇっす!」と本気の拍手。普段クールな中村まで、小さく頷いて店長に親指を立てた。" },
+      { img:"portraits/m_first_combo2_3.png", fallback:"💭",  caption:"店長(心)「これは店長会議で発表できる成果じゃないか? 『シフトの連鎖術』として本部に提案すれば、評価されて昇給ワンチャン…」想像が止まらない。" },
+      { img:"portraits/m_first_combo2_4.png", fallback:"❄️",  caption:"翌週の店長会議。本部「で、客単価は? 廃棄ロスは? 売上は?」シフトの話題に到達する前に、議題は次へ。会議室の温度が一気に下がる。" },
+      { img:"portraits/m_first_combo2_5.png", fallback:"☕",  caption:"バックヤードでコーヒー。連鎖の感動も、評価への期待も、もう薄まっている。「いいや、明日のシフトも、ちゃんと組もう」それしか、できることがない。" }
+    ]
+  },
+  "first_combo3": {
+    title: "💥 3日同時完成（神業）",
+    sub: "神業の直後にクレーム。それがリアル。",
+    panels: [
+      { img:"portraits/m_first_combo3_1.png", fallback:"💥",  caption:"水・木・金の3日が同時にシフト完成。シフト管理の世界では奇跡だ。店長の手が、シフト表の上で止まる。バイトたち全員が言葉を失う。" },
+      { img:"portraits/m_first_combo3_2.png", fallback:"😤",  caption:"その瞬間、レジに長い行列。先頭の客が机を叩く。「レジもう1台開けてくれます?」声が店中に響く。3連鎖の余韻が、3秒で消えた。" },
+      { img:"portraits/m_first_combo3_3.png", fallback:"🙇",  caption:"店長「申し訳ございません、今2人で…」客「無能なシフト管理だな。本部に通報するからな!」店長は反射的に「ありがとうございます…」と笑顔で返してしまう。" },
+      { img:"portraits/m_first_combo3_4.png", fallback:"📰",  caption:"夜、ローカル新聞から「神店長」特集の取材依頼LINEが届く。心が少し躍る。「これで、誰かに伝わるかも…」" },
+      { img:"portraits/m_first_combo3_5.png", fallback:"🚫",  caption:"翌朝、本部から「メディア取材は本部広報を通してください。今回は申請が間に合わないのでお断り願います」3連鎖の話は、誰にも届かない。" }
+    ]
+  },
+  "first_max4": {
+    title: "⚡ 横4コマ=8時間連勤を初配置",
+    sub: "田中、運命の長時間シフト",
+    panels: [
+      { img:"portraits/m_first_max4_1.png", fallback:"⚡",   caption:"店長、田中の横4コマ(8時間連続)シフトをついに決行。シフト表に「14-22 田中」とドンッと書き込む音は、命を削る音にも聞こえる。" },
+      { img:"portraits/m_first_max4_2.png", fallback:"😨",  caption:"田中、シフト表を見て固まる。「えっ、8時間? 来週試験ですよ? 親から仕送り止まってるんで…まあ、入りますけど…」笑顔の裏で、心は折れている。" },
+      { img:"portraits/m_first_max4_3.png", fallback:"🍺",  caption:"5時間目、酔っ払いの客に絡まれて田中「お前タバコの番号も覚えてないのか!」と怒鳴られる。無表情で「申し訳ございません」を繰り返す。" },
+      { img:"portraits/m_first_max4_4.png", fallback:"💀",  caption:"翌朝3時、田中からLINE「もう無理です、辞めます。試験落ちました」既読をつける前に、店長は深呼吸する。" },
+      { img:"portraits/m_first_max4_5.png", fallback:"✖️",  caption:"店長、シフト表の「田中」の名前に小さくバツ印。「またか…」と呟いて、求人サイトを開く。本部からの「求人広告費は使用済み」のメールが目に入る。" }
+    ]
+  },
+  "day_7": {
+    title: "📅 1週間分のシフト突破",
+    sub: "客のクレーム1週間ダイジェスト",
+    panels: [
+      { img:"portraits/m_day_7_1.png", fallback:"📅",  caption:"ついに1週間分のシフトを完全消化。7日 × 12コマ = 84コマ。すべて、誰かが立ち、誰かが捌いた。しかし客は容赦ない。" },
+      { img:"portraits/m_day_7_2.png", fallback:"🥢",  caption:"月曜、客「箸2膳、いや3膳、5膳!」店長「は、はい…」レジの底から箸を取り出す。袋に入れる前に「やっぱ2膳でいいや」。" },
+      { img:"portraits/m_day_7_3.png", fallback:"💳",  caption:"火曜、会計済んでからポイントカードを出される。「これ通して」店長「もう一度…」客「面倒くせぇな!」打ち直しに3分。後ろの行列が舌打ち。" },
+      { img:"portraits/m_day_7_4.png", fallback:"🛍️",  caption:"水曜、客「袋どうします?」客「持ってるに決まってるやろ!」袋の有無を聞かないと、それはそれで「気が利かない」と怒られる。" },
+      { img:"portraits/m_day_7_5.png", fallback:"📊",  caption:"週末、本部から「業績平均以下です。客単価向上策の提案を月曜までに」のLINE。1週間のシフトを完璧に埋めたことには、一言も触れられない。" }
+    ]
+  },
+  "day_14": {
+    title: "📆 2週間完全制覇",
+    sub: "ベテランが全員、ある決断をする",
+    panels: [
+      { img:"portraits/m_day_14_1.png", fallback:"📆",  caption:"2週間分、合計168コマのシフトを完全消化。地域マネージャーが視察に来て「あなたのお店、奇跡ですね」と一言。お世辞でも嬉しい。" },
+      { img:"portraits/m_day_14_2.png", fallback:"🍻",  caption:"バイトたちが初の打ち上げ会を居酒屋で開催。店長は店内で発注作業中。バイトのLINEに「店長、本当にいい人だよね」と書かれているのが見える。" },
+      { img:"portraits/m_day_14_3.png", fallback:"📃",  caption:"翌朝、高橋から「辞めます」昼に田中「就活始めるんで…」夕方に佐藤「実家戻ります」3通の退職届が机に並んだ。それは2週間制覇の「結果」だった。" },
+      { img:"portraits/m_day_14_4.png", fallback:"🥺",  caption:"バイト「店長、いい人すぎてここに居続けたらヤバいんです」店長「…そうか」店長は店長でしか居られない。蛍光灯だけが、優しく照らしていた。" },
+      { img:"portraits/m_day_14_5.png", fallback:"🔁",  caption:"3日後、求人サイトに応募ゼロ。店長、また自分でシフト穴を埋め始める。2週間制覇という伝説は、店長だけが胸に秘めた。" }
+    ]
+  },
+  "day_30": {
+    title: "🏝️ 1ヶ月完全制覇",
+    sub: "店長、ついに本部に勝つ(物理的に)",
+    panels: [
+      { img:"portraits/m_day_30_1.png", fallback:"🏆",  caption:"1ヶ月、合計360+コマのシフトを完全消化。地域内で前例のない記録。地区マネージャーが個別に「あなたを表彰したい」と本部に上申してくれた。" },
+      { img:"portraits/m_day_30_2.png", fallback:"💼",  caption:"翌週、本部から異動辞令。「あなたの管理能力を他店にも生かしてほしい。月曜から隣県のヘルプに入って下さい」家賃補助なし、引っ越し費用は自腹。" },
+      { img:"portraits/m_day_30_3.png", fallback:"📑",  caption:"店長、退職届と労基署への通報書を同時に書く。手は震えていない。「14時間勤務×30日連続、店長手当月1万円、残業代ゼロ」事実だけを、丁寧に。" },
+      { img:"portraits/m_day_30_4.png", fallback:"👰",  caption:"家に帰ると、妻が机にあった離婚届を、そっと引き出しにしまう。「もう少し、考えてみる」店長「…ありがとう」13年ぶりの夫婦らしい会話。" },
+      { img:"portraits/m_day_30_5.png", fallback:"🏖️",  caption:"1週間後、南国のビーチ。アロハシャツを着た店長が、スマホの電源を切る。本部からの着信履歴47件。「今は、見ない」波の音だけが、彼の世界になる。" }
+    ]
+  },
+  "yen_100k": {
+    title: "💴 累計人件費 ¥100,000",
+    sub: "自分の時給を計算したくなくなる瞬間",
+    panels: [
+      { img:"portraits/m_yen_100k_1.png", fallback:"💴",  caption:"今月のバイト人件費が10万円を突破。店長、経理画面を見つめる。「もう10万か…早いな」机の引き出しから電卓を取り出す。" },
+      { img:"portraits/m_yen_100k_2.png", fallback:"📝",  caption:"先月の出勤日数30日、1日平均14時間、合計420時間。月給28万 ÷ 420 = 時給667円。地域の最低賃金は1100円。店長、画面を二度見する。" },
+      { img:"portraits/m_yen_100k_3.png", fallback:"😶",  caption:"電卓を閉じる。なかったことにする。それしか、できない。" },
+      { img:"portraits/m_yen_100k_4.png", fallback:"📞",  caption:"本部にダメ元で電話。「私の時給換算、相談したくて…」本部「店長は正社員なので、時給換算は労務管理上、そぐいません」即答だった。" },
+      { img:"portraits/m_yen_100k_5.png", fallback:"🌙",  caption:"帰り道、空に向かって呟く。「俺、何のためにこの仕事してるんだっけ?」返事は、車のクラクションだけ。" }
+    ]
+  },
+  "yen_300k": {
+    title: "💴 累計 ¥300,000 = バイト1人月収",
+    sub: "バイトの月収が、店長を超える日",
+    panels: [
+      { img:"portraits/m_yen_300k_1.png", fallback:"💴",  caption:"累計バイト人件費が30万円を突破。これはフルタイムバイトの月収相当。店長、経理画面を凝視する。" },
+      { img:"portraits/m_yen_300k_2.png", fallback:"👀",  caption:"高橋の今月の給料明細が目に入る。基本給22万 + 深夜手当8万 + 皆勤賞5千 = 305,000円。店長(心)「えっ…俺、月給28万なんだけど…?」" },
+      { img:"portraits/m_yen_300k_3.png", fallback:"😶",  caption:"高橋「どうかしました?」店長「い、いや、何でも」笑顔を作るのが下手だった。高橋は何かを察したけれど、そっと黙った。" },
+      { img:"portraits/m_yen_300k_4.png", fallback:"📞",  caption:"本部に電話「私の給料、見直しできませんか? バイトより低いのは…」本部「正社員のメリットは安定です。賞与もあります」(言うだけ)" },
+      { img:"portraits/m_yen_300k_5.png", fallback:"🙇",  caption:"店長、シフト表を丁寧に整える。「正社員のメリットは、シフト調整の自由度だな」自分に言い聞かせる、誰にも届かない正当化。" }
+    ]
+  },
+  "yen_1m": {
+    title: "💴 累計 ¥1,000,000",
+    sub: "店長の年収の1/5。なお店長はバイトより安い。",
+    panels: [
+      { img:"portraits/m_yen_1m_1.png", fallback:"💴",  caption:"累計人件費が100万円を突破。店長は経理画面の前で動けなくなる。「うちの店、これだけバイトに払ってるのか…」" },
+      { img:"portraits/m_yen_1m_2.png", fallback:"📊",  caption:"店長の年収380万円の、ちょうど1/5。1ヶ月で、自分の2.5ヶ月分の給料がバイトに流れている計算。" },
+      { img:"portraits/m_yen_1m_3.png", fallback:"❓",  caption:"店長(心)「ちょっと待て、じゃあうちの店、誰が儲かってるんだ?」売上1500万、バイト100万、家賃50万、仕入れ800万…残り520万。" },
+      { img:"portraits/m_yen_1m_4.png", fallback:"🏢",  caption:"答えはすぐ出る。本部フランチャイズロイヤリティが約400万円。オーナーは120万、店長は28万。店長の取り分は、本当に、隅だ。" },
+      { img:"portraits/m_yen_1m_5.png", fallback:"☕",  caption:"店長、コーヒーを淹れる。今日もコーヒー。今日も家に帰れない。店長の人生は、誰かのロイヤリティの一部に組み込まれている。" }
+    ]
+  },
+  "survived_3min": {
+    title: "🏅 3分間、生き延びた",
+    sub: "盤面は1週間先まで縮まったが、まだ営業中。",
+    panels: [
+      { img:"portraits/m_survived_1.png", fallback:"⏱️",  caption:"3:00がついに0:00になる。盤面はもう1週間先しか見えない。シフト管理の世界で、未来が見えなくなるのは、それだけで地獄だ。" },
+      { img:"portraits/m_survived_2.png", fallback:"💪",  caption:"店長、3本目のエナドリを開ける。手が震えている。「あと何時間、立っていられるかな」呟きが空気に溶ける。" },
+      { img:"portraits/m_survived_3.png", fallback:"📱",  caption:"妻からLINE「今夜も会議?」店長「うん、会議だね」(嘘)妻は何度目の嘘か、もうカウントしていない。" },
+      { img:"portraits/m_survived_4.png", fallback:"🩻",  caption:"健康診断の通知、受診期限は3ヶ月前。それを店長は、机の下に蹴り込む。胸の動悸は、もう無視できない。" },
+      { img:"portraits/m_survived_5.png", fallback:"🌅",  caption:"窓の外、空が白み始める。始発の客が入ってきて「おにぎりとコーヒー」店長「ありがとうございます」3分の試練を、超えた。" }
+    ]
+  },
+  "ending": {
+    title: "🌅 エンディング",
+    sub: "3分間、すべてのピースを置き切った男の、その後の話。",
+    panels: [
+      { img:"portraits/e_1.png",  fallback:"⏱️",   caption:"3分のタイマーが0になり、最後のピースがコトンと盤面に収まった瞬間、コンビニの蛍光灯がふっと優しくなった気がした。佐々木は、息を吐く。長い、長い息だった。" },
+      { img:"portraits/e_2.png",  fallback:"📋",   caption:"シフト表を見つめる。2週間先のすべての時間帯に、誰かの名前が書かれている。これは、佐々木が12年間追い求めて、何度も諦めかけて、それでも諦めなかった一枚だ。" },
+      { img:"portraits/e_3.png",  fallback:"📱",   caption:"佐々木、グループLINEに一言だけ送信。「みんな、今日まで本当にありがとう」絵文字も句点も無い、12年で一番素直な文だった。" },
+      { img:"portraits/e_4.png",  fallback:"🎓",   caption:"田中(学生)から返信。「店長、来月就活で東京行きますけど、社会人になっても店長のこと忘れません。試験落ちたのは僕のせいです、店長のせいじゃないっす」" },
+      { img:"portraits/e_5.png",  fallback:"👶",   caption:"山田(主婦)。「店長、来月生まれる子の名前に『佐』の字、もらってもいいですか? 夫もお会いしたがってます。あの離婚の話、結局立ち消えました」" },
+      { img:"portraits/e_6.png",  fallback:"🌃",   caption:"佐藤(夜型)。「店長のおかげで実家に帰る決心がつきました。来月から地元の工場で正社員、親に本当のことを話します。ありがとうございました」" },
+      { img:"portraits/e_7.png",  fallback:"💪",   caption:"高橋(ベテラン)。「私、夫の介護に専念します。15年勤めましたが、店長のシフトのおかげで最後の3ヶ月、家族と過ごせました。腰の手術は来月です」" },
+      { img:"portraits/e_8.png",  fallback:"😎",   caption:"渡辺(陽キャ)。「店長、彼女と結婚します。妊娠の話、本物でした。仲人やってくれませんか? お礼に親父のスナックでカラオケ無料、永久に」" },
+      { img:"portraits/e_9.png",  fallback:"👰",   caption:"家に帰ると、妻がリビングで起きていた。離婚届の代わりに、二人分の朝ごはんが机に並んでいた。妻「もう一度、ゆっくり話そう」佐々木「うん」13年で初めて、ちゃんと頷けた。" },
+      { img:"portraits/e_10.png", fallback:"🌄",   caption:"翌朝、佐々木はコンビニのドアの前で看板の電気を落とす。「お疲れさま」と店に呟いて、朝日の中へ歩き出す。シフト表テトリスの終わり。人生の続きは、もう少しゆっくり組もう。" }
+    ]
+  },
+  "closed": {
+    title: "🚫 閉店のお知らせ",
+    sub: "シフトが埋め切れず、本部からの連絡が来た。",
+    panels: [
+      { img:"portraits/m_closed_1.png", fallback:"📋",  caption:"シフト表に空白が増えていく。店長、震える手で本部に「人手不足で営業継続困難」と報告メール。送信ボタンを押すまで、3時間かかった。" },
+      { img:"portraits/m_closed_2.png", fallback:"📞",  caption:"本部から電話「店長、来月から在庫管理係に異動です。今の店舗は他店との統合になります」声に温度がなかった。" },
+      { img:"portraits/m_closed_3.png", fallback:"💬",  caption:"バイトに事情を説明。田中「お疲れさまでした…」高橋「次の店舗でも頑張ってください」誰も恨み言を言わなかった。それが余計に辛い。" },
+      { img:"portraits/m_closed_4.png", fallback:"🚪",  caption:"最後の営業日、店長は1人で店内を歩く。「8年、ここで色んなことがあった」棚の一つ一つに、店長の指紋と汗が染み込んでいる。" },
+      { img:"portraits/m_closed_5.png", fallback:"🌙",  caption:"店長は今、本部の在庫管理部にいる。深夜の段ボールに囲まれて、過去のシフト表を思い出す。「あれは、楽しかったな」初めて、そう思えた。" }
+    ]
+  }
+};
+
+// 紙芝居状態
+let amState = { key: null, idx: 0, panels: [], title: "", sub: "" };
+
+function showAchievementManga(key) {
+  if (achievements.has(key)) return false;
+  const data = ACHIEVE_MANGA[key];
+  if (!data) return false;
+  achievements.add(key);
+
+  // 既に表示中ならキューに積む
+  if (achievementPaused) {
+    achievementQueue.push(key);
+    return true;
+  }
+
+  achievementPaused = true;
+  pauseStartedAt = performance.now();    // 時間停止開始
+  if (fallTimer) { clearInterval(fallTimer); fallTimer = null; }
+
+  amState.key = key;
+  amState.idx = 0;
+  amState.panels = data.panels;
+  amState.title = data.title;
+  amState.sub = data.sub || "";
+
+  document.getElementById("amTitle").textContent = data.title;
+  document.getElementById("amSub").textContent = amState.sub;
+  renderCurrentPanel();
+  document.getElementById("achieveModal").classList.remove("hide");
+  SFX.clear();
+  return true;
+}
+
+function renderCurrentPanel() {
+  const p = amState.panels[amState.idx];
+  if (!p) return;
+  const total = amState.panels.length;
+  document.getElementById("amPnum").textContent = `PANEL ${amState.idx + 1} / ${total}`;
+  const imgEl = document.getElementById("amImg");
+  if (p.img) {
+    imgEl.innerHTML = `<img src="${p.img}" alt="" onerror="this.parentNode.innerHTML='${p.fallback || '🏪'}'">`;
+  } else {
+    imgEl.innerHTML = p.fallback || '🏪';
+  }
+  document.getElementById("amCap").textContent = p.caption;
+  // ボタン状態
+  document.getElementById("amPrev").disabled = amState.idx === 0;
+  document.getElementById("amNext").textContent =
+    amState.idx === total - 1 ? "▶ 続ける" : `▶ 次へ (${amState.idx + 2}/${total})`;
+}
+
+function nextPanel() {
+  if (amState.idx < amState.panels.length - 1) {
+    amState.idx++;
+    renderCurrentPanel();
+  } else {
+    closeAchievementModal();
+  }
+}
+function prevPanel() {
+  if (amState.idx > 0) {
+    amState.idx--;
+    renderCurrentPanel();
+  }
+}
+
+function closeAchievementModal() {
+  const wasPrologue = amState.key === "prologue";
+  document.getElementById("achieveModal").classList.add("hide");
+  // 漫画表示中だった時間を「ポーズ時間」として累積
+  if (pauseStartedAt > 0) {
+    totalPausedMs += performance.now() - pauseStartedAt;
+    pauseStartedAt = 0;
+  }
+  // キューに残っていれば次を表示
+  if (achievementQueue.length > 0) {
+    const next = achievementQueue.shift();
+    achievements.delete(next);   // 再追加されるように
+    achievementPaused = false;   // showAchievementManga 内で再び true に戻る
+    setTimeout(() => showAchievementManga(next), 250);
+    return;
+  }
+  achievementPaused = false;
+  if (wasPrologue) {
+    // プロローグ閉じ後は、シンプルなルールモーダルへ
+    openRuleModal();
+    return;
+  }
+  if (!gameOver) {
+    // 二重起動を防ぐため必ず clear してから再起動
+    if (fallTimer) clearInterval(fallTimer);
+    fallTimer = setInterval(() => move(0, 1), fallSpeed);
+  } else {
+    // ゲームオーバー時はリスタートを促す
+    flashHelp("🔁 リスタートで再挑戦（Rキー or ボタン）");
+  }
+}
+
+// 名前→画像パス（LINE通知の本部・親は画像なし、絵文字フォールバック）
+const PORTRAIT_BY_NAME = {
+  "田中": "portraits/tanaka.png",
+  "山田": "portraits/yamada.png",
+  "佐藤": "portraits/sato.png",
+  "高橋": "portraits/takahashi.png",
+  "渡辺": "portraits/watanabe.png"
+};
+
+// セリフバンク（配置時にランダムで1つ）— あるあるネタ＋ブラック寄り
+const PIECE_LINES = {
+  "田中": [
+    "来週試験あるんすけど…📚",
+    "また8時間連勤?マジすか😩",
+    "タバコの番号、まだ100種類しか覚えてないんで…🚬",
+    "了解っす、奨学金返済きついんで助かります💸",
+    "終電なくなったら店で泊めてもらえます?",
+    "メンタル削れて教科書、開く気にならない📖",
+    "親から仕送り止められて、もう逃げ場ないんすよ",
+    "卒論、書く時間が3年前から無いです",
+    "酔っ払いの相手、店長やってくれません?🍺",
+    "サークルの先輩から借金催促きました🆘"
+  ],
+  "山田": [
+    "18時には上がりたいです🙏",
+    "子供のお迎えが…保育園延長20時で罪悪感MAXです",
+    "夫が単身赴任2年目、もう顔忘れそう",
+    "PTA会長押し付けられて死にそうです",
+    "ママ友グループLINEが既読50で恐怖です",
+    "下の子が園で「ママはコンビニで寝てる」って言ったらしくて…",
+    "夫のスマホ、最近パスコード変わったんですよね",
+    "夫の同窓会、3週連続って何の同窓会なんでしょう",
+    "保険、夫名義のは全部解約しときました",
+    "実家の母が認知症で、もう自分も限界です"
+  ],
+  "佐藤": [
+    "昼は無理ですよ〜3日寝てません🌃",
+    "ガス止まって5日目です…☕",
+    "彼女から既読つかなくなって3年経ちました",
+    "実家には「東京で頑張ってる」って言ってます",
+    "深夜手当だけが生きる理由っす💴",
+    "光が痛い…サングラスで入ります🕶️",
+    "また家賃滞納の張り紙、剥がしてきました",
+    "30過ぎてフリーターなの、親に言ってないです",
+    "夢ですか? 寝るのが夢ですね…",
+    "コンビニの廃棄が最近の主食です🍙"
+  ],
+  "高橋": [
+    "任せてください💪",
+    "店長、無理しすぎですよ(自分も無理してますが)",
+    "新人さん、私が見ますね",
+    "腰のヘルニア、もう手術しかないって言われました🦴",
+    "夫の介護で家に帰りたくないんです、ここが救い",
+    "息子は連絡くれないですけど、まあ元気でしょう",
+    "コンビニ歴15年です。表彰されないけど",
+    "新人がすぐ辞めるの、私のせいって言われました…",
+    "店長より長くここに居ます。たぶん人生も",
+    "本部の人、また現場知らずに来ましたね"
+  ],
+  "渡辺": [
+    "土曜マジすか?彼女いるんすけど(3人目)🤣",
+    "ま、入りますわ。サラ金返済日なんで😎",
+    "シフト誰か変わってくんない?",
+    "髪ピンクで親から勘当されました💇",
+    "バイク事故ったんで通勤、徒歩でいいすか🏍️",
+    "彼女に妊娠したって言われた件、まだ未解決っす",
+    "親が認知症で実家戻されそうで急いで稼ぎたい",
+    "前のバイト先、3つ飛びました",
+    "結婚式呼ばれたんでご祝儀分くださいよ💴",
+    "コンビニ店員は確定申告いらないんすよね?"
+  ]
+};
+
+// 次の応募「お願い」セリフ（次のバイト枠表示用、固定1個）
+const NEXT_REQUESTS = {
+  "田中": "「家庭教師と被らなければOKっす📚」",
+  "山田": "「18時までならOKです🙏」",
+  "佐藤": "「昼以外でお願いします〜🌃」",
+  "高橋": "「いつでも入りますよ💪」",
+  "渡辺": "「土曜は彼女いるんすよね…😎」"
+};
+
+// 店長の独り言バンク（状況別）— 社畜系ブラック寄り
+const MANAGER_LINES = {
+  start: [
+    "今週もよろしく頼むぞ…☕",
+    "シフト表、なんとか完成させるか…",
+    "コーヒー入れ直すか…☕",
+    "今週は人足りるかな…",
+    "妻には「会議だ」って言って店に来てる",
+    "また、今月も家に帰れねえな"
+  ],
+  ongoing: [
+    "土曜の夜どうすんだよ…",
+    "LINE既読つかねえ…📱",
+    "また欠勤連絡か…🤦",
+    "人手不足、いつまで続くんだ…",
+    "シフト組む時間で深夜回せるんだが…",
+    "本部にもう報告したくない…",
+    "とりあえずコーヒーだ☕",
+    "誰か空いてないかな…",
+    "去年はもっとマシだった気がする",
+    "求人広告、また出すか…💸",
+    "本部から「もっと利益出せ」とまた言われた",
+    "退職代行から手紙が3通来てる…",
+    "妻からの離婚届がまだサイン待ちだ",
+    "夢、35歳で諦めた。なお現在45歳",
+    "本部のえらい人は店に来たことない",
+    "深夜のコンビニ、客より虫の方が来る",
+    "「最近の若いの」って言いたくないけど…",
+    "新人がまた3日で辞めた。研修費返してくれ",
+    "去年は2億売り上げて、給料は18万のままだ"
+  ],
+  cleared1: [
+    "ふぅ…1日埋まった☕",
+    "ナイス、これで回せる",
+    "マジで助かった🙏",
+    "1行クリア、神✨",
+    "やっと一息つける…",
+    "今日、家に帰れるかも…",
+    "本部に報告できる成績がやっと1つ"
+  ],
+  clearedMulti: [
+    "うおおお複数行同時消し!🎉",
+    "今日の俺、シフト組むの天才では?",
+    "コンボ来た!!⚡",
+    "これは時給上がるやつ💴(上がらない)",
+    "本部に自慢していい?(無視される)",
+    "天才か?俺。なお年収は新卒以下"
+  ],
+  selfHelp: [
+    "俺がやるか…☕",
+    "店長権限、発動!⚡",
+    "もう寝る時間なんだけどな…",
+    "今日も自分で穴埋め…",
+    "経営者の鑑だな(自分で言うな)",
+    "うちの店長手当、月1万なんだ知ってた?",
+    "労基に怒られるやつ。でも誰もチクらない",
+    "妻に「いつ帰る?」って聞かれた。「分からん」"
+  ],
+  lowHelps: [
+    "もう体力ねえ…🥵",
+    "倒れる前にバイト集まってくれ…",
+    "本部、誰か派遣して…📞",
+    "胃カメラの予約、また流したな",
+    "健康診断、3年スルーしてる",
+    "胸が痛い。ストレスだろ多分"
+  ],
+  gameOver: [
+    "……閉店です。💀",
+    "あぁ…もう無理…",
+    "本部に報告だな…📞",
+    "求人サイトに5万課金するか…💸",
+    "今日から無人コンビニ運営です。",
+    "退職代行に電話する勇気が今ない",
+    "本部の偉い人、葬式来てくれるかな",
+    "妻、慰謝料の話だけ進めてた"
+  ]
+};
+
+// ライン消去（=その日のシフト完成）時、最多コマMVPの喜びセリフ — あるあるブラック寄り
+const CLEAR_CHEER = {
+  "田中": [
+    "やっと終わった〜!🍻 ファミレスでテスト勉強する!(寝るけど)",
+    "今日のシフト完走!📚 (単位は落とした)",
+    "終電に間に合うわ〜🚇 (家賃滞納中だけど)",
+    "店長、ナイス組み方っす✊ (奨学金返済まであと28年)",
+    "今日のバイト代でラーメン食って終わり🍜",
+    "親に「就活してる」って嘘ついた日報、書かなきゃ"
+  ],
+  "山田": [
+    "お疲れさまでした🙏 子供のお迎え行けます!(20時延長で罪悪感)",
+    "今日も無事に終わってよかった☺️ (家では夫不在)",
+    "夕飯、コンビニの廃棄もらって帰ろう🍱",
+    "保育園、間に合う〜!👶 (先生に変な目で見られる)",
+    "夫からのLINE、3日既読つかない…",
+    "ママ友グループに「今日も働き者」って盛ってる"
+  ],
+  "佐藤": [
+    "ふぅ…帰って寝るわ…🌙 (帰る家あるだけマシ)",
+    "深夜手当、ありがてぇ💴 (家賃支払日まで持つかな)",
+    "コーヒーもう一本飲んでから帰る☕ (ガス止まってるから)",
+    "朝日見たくないから早く帰る…🌅 (吸血鬼かよ)",
+    "親には「正社員になった」って言ってる…",
+    "彼女からの既読、まだつかない…3年と2日目"
+  ],
+  "高橋": [
+    "お疲れさま、店長💪 今日も助かりました",
+    "今日もシフト完成、いい一日でしたね(家には帰りたくないけど)",
+    "腰、もちました🦴 また明日!(湿布3枚目)",
+    "店長、無理しすぎないでくださいね(私もですが)",
+    "夫の介護、また誰かにバトンタッチしたい…",
+    "息子からの電話、半年来てません🙇"
+  ],
+  "渡辺": [
+    "終わったー!彼女んち寄って帰るわ😎 (どの彼女だっけ)",
+    "今夜の予定セーフ!🍻 (サラ金返済を忘れてた)",
+    "店長サンキューっす🤙 (来週から無断欠勤するけど)",
+    "バイクで爆走して帰る!🏍️ (免停寸前)",
+    "親が「家戻ってこい」って3回連絡来てる無視!",
+    "結婚の話、まだ親には黙ってるんで…"
+  ],
+  "店長": [
+    "俺もお疲れ…☕ (帰れないけど)",
+    "何とか1日埋まったな…(俺の人生は埋まらない)",
+    "店長、店長権限で休憩…(誰も止めない、誰も気にしない)",
+    "自分入った日は早く帰りたい…(妻に「会議で遅い」と嘘)",
+    "今月の店長手当、1万円。残業代ゼロ",
+    "胃カメラ予約、また流した💊"
+  ]
+};
+
+// LINE風通知（演出のみ・盤面影響なし）— あるある＋ブラック寄り
+const LINE_NOTIFICATIONS = [
+  { who:"山田", msg:"子供熱出ました🤧 ＿(夫が見れないらしいです)" },
+  { who:"田中", msg:"終電なくなりそうで…🚇 (店内泊めて欲しいです)" },
+  { who:"渡辺", msg:"彼女2人にバレました💔 (両方欠勤します)" },
+  { who:"佐藤", msg:"朝起きれません🌅 (起きてもガス止まってます)" },
+  { who:"高橋", msg:"腰やりました🦴 (病院行く金が…)" },
+  { who:"山田", msg:"PTA会長にされました📒 (もう何もしたくない)" },
+  { who:"田中", msg:"奨学金の督促が来て…📚 (今日のシフト代だけでも前借りできますか)" },
+  { who:"佐藤", msg:"電気止まりました🔌 (コンビニで充電します)" },
+  { who:"渡辺", msg:"妊娠したって…🤰 (誰の子か分からない)" },
+  { who:"高橋", msg:"夫がまた介護施設から出されて😩" },
+  { who:"本部", msg:"求人広告予算ゼロです📊 (採用は店長で頑張れと)" },
+  { who:"本部", msg:"今月の売上目標300%にしました📈" },
+  { who:"親",   msg:"お盆は帰ってくるよね?👵 (もう8年帰ってない)" },
+  { who:"妻",   msg:"離婚届、机に置いてあります🖋️" },
+  { who:"妻",   msg:"今夜も会議?気にしないでね😊 (鍵替えました)" },
+  { who:"銀行", msg:"残高不足です💳 (家賃の引き落としに失敗)" },
+  { who:"大家", msg:"家賃3ヶ月分、よろしく🏠" },
+  { who:"税務署", msg:"確定申告の件で…📑 (3年スルーの件で)" },
+  { who:"医者", msg:"検査結果が…💊 (すぐ来てください)" },
+  { who:"母",   msg:"父さんが倒れたって…🏥" },
+  { who:"前のバイト", msg:"店長辞めましたよ☕ (うちおいでよ)" },
+  { who:"労基", msg:"匿名で通報がありました📞" },
+  { who:"ヤミ金", msg:"今日の0時までに返済を💸" }
+];
+
+let board, current, nextBase, score, lines, gameOver, fallTimer;
+let helps = 5;
+const HELPS_PER_WEEK = 5;
+let lastResetWeek = 0;     // 最後にヘルプを復活させた「週インデックス」（Math.floor((startDay-1)/7)）
+let lineNotifyTimer;
+
+// 3分タイマー & 動的難易度
+const GAME_DURATION_MS = 180_000;   // 3分
+let gameStartedAt = 0;
+let difficultyTimer = null;
+let visibleRows = ROWS;             // 「見えるシフト先の日数」: 14日 → 7日に縮む
+let fallSpeed = 900;                // ピース落下間隔(ms)
+let countdownTimer = null;
+// 漫画中の時間停止
+let pauseStartedAt = 0;             // 漫画モーダル開いた時刻
+let totalPausedMs = 0;              // 累積ポーズ時間
+let totalCells = 0;  // 累積配置マス数（消えたものも含む、給与計算用）
+const YEN_PER_HOUR = 1200;
+const YEN_PER_CELL = YEN_PER_HOUR * 2;  // 1マス=2時間=¥2400
+
+// ===== 効果音 + BGM（Web Audio API、外部ファイル不要） =====
+let audioCtx = null;
+let muted = false;
+let bgmTimer = null;
+let bgmStep = 0;
+let masterGain = null;
+
+function ensureAudio() {
+  if (audioCtx) return audioCtx;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.5;
+    masterGain.connect(audioCtx.destination);
+  } catch (e) { audioCtx = null; }
+  return audioCtx;
+}
+
+function tone(freq, dur, type = "sine", gain = 0.15, whenOffset = 0) {
+  if (!audioCtx || muted) return;
+  const t = audioCtx.currentTime + whenOffset;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(masterGain);
+  o.start(t);
+  o.stop(t + dur + 0.05);
+}
+
+const SFX = {
+  move:    () => tone(440, 0.04, "square", 0.06),
+  rotate:  () => { tone(587, 0.06, "triangle", 0.10); setTimeout(() => tone(784, 0.06, "triangle", 0.10), 45); },
+  lock:    () => { tone(140, 0.10, "sawtooth", 0.18); tone(220, 0.08, "triangle", 0.10, 0.02); },
+  hardDrop:() => { tone(180, 0.05, "sawtooth", 0.18); setTimeout(() => tone(90, 0.18, "sawtooth", 0.20), 40); },
+  clear:   () => { [523, 659, 784, 1046, 1318].forEach((f, i) => setTimeout(() => tone(f, 0.22, "triangle", 0.14), i * 65)); },
+  combo:   () => { [523, 784, 1046, 1318, 1568, 2093].forEach((f, i) => setTimeout(() => tone(f, 0.22, "triangle", 0.16), i * 55)); },
+  help:    () => { [880, 1100, 1320].forEach((f, i) => setTimeout(() => tone(f, 0.10, "sine", 0.12), i * 50)); },
+  gameover:() => { [392, 311, 261, 196, 165].forEach((f, i) => setTimeout(() => tone(f, 0.35, "sawtooth", 0.18), i * 180)); },
+  lineNotify:() => { tone(1318, 0.08, "sine", 0.10); setTimeout(() => tone(988, 0.12, "sine", 0.10), 110); },
+  start:   () => { tone(659, 0.10, "triangle", 0.12); setTimeout(() => tone(880, 0.18, "triangle", 0.12), 110); }
+};
+
+// BGM: 深夜カフェ風 lo-fi / 4コード進行ループ（Cmaj7 → Am7 → Dm7 → G7）
+const BGM_CHORDS = [
+  { root: 130.81, notes: [261.63, 329.63, 392.00, 493.88] }, // Cmaj7
+  { root: 110.00, notes: [220.00, 261.63, 329.63, 392.00] }, // Am7
+  { root:  73.42, notes: [293.66, 349.23, 440.00, 523.25] }, // Dm7  bass D
+  { root:  98.00, notes: [196.00, 246.94, 293.66, 349.23] }  // G7
+];
+
+function bgmTick() {
+  if (!audioCtx || muted) return;
+  const ch = BGM_CHORDS[bgmStep % BGM_CHORDS.length];
+  // ベース（持続）
+  tone(ch.root, 1.7, "sine", 0.07, 0);
+  tone(ch.root * 2, 1.7, "sine", 0.025, 0);
+  // アルペジオ（4音をシャッフル）
+  const arp = ch.notes.slice();
+  arp.forEach((f, i) => tone(f, 0.55, "triangle", 0.045, i * 0.22));
+  // 弱めのきらめき（コードトーンから1音）
+  const sparkle = arp[bgmStep % arp.length] * 2;
+  tone(sparkle, 0.45, "sine", 0.03, 1.0);
+  bgmStep++;
+}
+
+function startBgm() {
+  if (bgmTimer || !audioCtx) return;
+  bgmStep = 0;
+  bgmTick();
+  bgmTimer = setInterval(bgmTick, 1900);
+}
+function stopBgm() {
+  clearInterval(bgmTimer);
+  bgmTimer = null;
+}
+
+function toggleMute() {
+  muted = !muted;
+  const btn = document.getElementById("muteBtn");
+  if (btn) btn.textContent = muted ? "🔇 音OFF" : "🔊 音ON";
+  if (muted) {
+    stopBgm();
+  } else {
+    ensureAudio();
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    if (!gameOver) startBgm();
+  }
+}
+
+// 初回ユーザー操作で AudioContext を確実に resume → BGM 開始
+let audioBootstrapped = false;
+function bootstrapAudioOnce() {
+  if (audioBootstrapped) return;
+  audioBootstrapped = true;
+  ensureAudio();
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  if (!muted && !gameOver) startBgm();
+  SFX.start();
+}
+document.addEventListener("keydown", bootstrapAudioOnce, { once: false });
+document.addEventListener("click", bootstrapAudioOnce, { once: false });
+
+function emptyBoard() {
+  return Array.from({length:H}, () => Array(W).fill(""));
+}
+
+function pickPiece() {
+  return pieces[Math.floor(Math.random() * pieces.length)];
+}
+
+function findPieceByName(name) {
+  return pieces.find(p => p.name === name);
+}
+
+function cloneCells(cells) {
+  return cells.map(c => [c[0], c[1]]);
+}
+
+function normalizeCells(cells) {
+  const minX = Math.min(...cells.map(c => c[0]));
+  const minY = Math.min(...cells.map(c => c[1]));
+  return cells.map(([x,y]) => [x - minX, y - minY]);
+}
+
+function pieceWidth(cells) {
+  return Math.max(...cells.map(c => c[0])) + 1;
+}
+
+function makePiece(base) {
+  const cells = normalizeCells(cloneCells(base.cells));
+  return {
+    name: base.name,
+    mark: base.mark,
+    emoji: base.emoji,
+    cells,
+    x: Math.floor((W - pieceWidth(cells)) / 2),
+    y: topBlockedRows()       // 「天井」のすぐ下からスポーン
+  };
+}
+
+function spawn() {
+  if (!nextBase) nextBase = pickPiece();
+  current = makePiece(nextBase);
+  nextBase = pickPiece();
+
+  if (collides(current.x, current.y, current.cells)) {
+    gameOver = true;
+    setManager(pick(MANAGER_LINES.gameOver));
+    SFX.gameover();
+    stopBgm();
+    clearInterval(fallTimer);
+    clearInterval(difficultyTimer);
+    clearTimeout(lineNotifyTimer);
+    // 閉店漫画
+    setTimeout(() => showAchievementManga("closed"), 700);
+  }
+}
+
+function topBlockedRows() { return Math.max(0, ROWS - visibleRows); }
+
+function collides(px, py, cells) {
+  const topBlocked = topBlockedRows();
+  for (const [cx, cy] of cells) {
+    const x = px + cx;
+    const y = py + cy;
+    if (x < 0 || x >= W || y < 0 || y >= H) return true;
+    if (y < topBlocked) return true;        // 「天井」より上は不可侵
+    if (board[y][x]) return true;
+  }
+  return false;
+}
+
+function lockPiece() {
+  for (const [cx, cy] of current.cells) {
+    board[current.y + cy][current.x + cx] = current.mark;
+  }
+  totalCells += current.cells.length;
+  SFX.lock();
+  // 横長ボーナス: ピースの横幅が大きいほど高得点（横4=+30, 横3=+20, 横2=+10）
+  const w = pieceWidth(current.cells);
+  if (w >= 2) {
+    const bonus = (w - 1) * 10;
+    score += bonus;
+    flashScoreFloat(`+${bonus} 横長ボーナス!`);
+  }
+  // 配置時のポップは出さない（ユーザー要望）。消去時の charPop で代わりに出す。
+  const placedW = w;
+  clearFullRows();
+  spawn();
+  // 達成系アチーブ：横4連勤の初配置のみ（配置タイミングの中で唯一の成功体験）
+  if (placedW >= 4) showAchievementManga("first_max4");
+}
+
+function clearFullRows() {
+  let cleared = 0;
+  const clearedTops = []; // 消える行ごとに「一番コマ数が多かった人」1人だけ
+  for (let y = H - 1; y >= 0; y--) {
+    if (board[y].every(Boolean)) {
+      const counts = {};
+      for (const m of board[y]) {
+        const nm = MARK_TO_NAME[m];
+        if (nm) counts[nm] = (counts[nm] || 0) + 1;
+      }
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      clearedTops.push({ day: dayLabel(y), name: top ? top[0] : null, count: top ? top[1] : 0 });
+      board.splice(y, 1);
+      board.unshift(Array(W).fill(""));
+      cleared++;
+      y++;
+    }
+  }
+
+  if (cleared) {
+    lines += cleared;
+    score += cleared * cleared * 100;
+    startDay += cleared;     // カレンダーが cleared 日分進む
+    // 週が変わったらヘルプ復活（毎週月曜=startDayが「7N+1」を跨いだら）
+    const currentWeek = Math.floor((startDay - 1) / 7);
+    if (currentWeek > lastResetWeek) {
+      helps = HELPS_PER_WEEK;
+      lastResetWeek = currentWeek;
+      flashHelp(`🔁 新しい週! 自分ヘルプが ${HELPS_PER_WEEK} 回まで復活しました。`);
+    }
+    if (cleared >= 2) SFX.combo(); else SFX.clear();
+    cheerByTop(clearedTops);
+    if (cleared >= 2) {
+      setManager(pick(MANAGER_LINES.clearedMulti));
+    } else {
+      setManager(pick(MANAGER_LINES.cleared1));
+    }
+    // アチーブ判定（最後にチェックして漫画を差し込む）
+    setTimeout(() => {
+      showAchievementManga("first_clear");
+      if (cleared >= 2) showAchievementManga("first_combo2");
+      if (cleared >= 3) showAchievementManga("first_combo3");
+      const elapsed = startDay - 1;
+      if (elapsed >= 7)  showAchievementManga("day_7");
+      if (elapsed >= 14) showAchievementManga("day_14");
+      if (elapsed >= 30) showAchievementManga("day_30");
+      // 累計人件費系（給料単位で実感が湧くもの）
+      const yenTotal = totalCells * YEN_PER_CELL;
+      if (yenTotal >= 100000)  showAchievementManga("yen_100k");
+      if (yenTotal >= 300000)  showAchievementManga("yen_300k");
+      if (yenTotal >= 1000000) showAchievementManga("yen_1m");
+    }, 1800);
+  }
+}
+
+function move(dx, dy) {
+  if (gameOver || achievementPaused) return;
+  if (!collides(current.x + dx, current.y + dy, current.cells)) {
+    current.x += dx;
+    current.y += dy;
+    if (dx !== 0) SFX.move();
+  } else if (dy > 0) {
+    lockPiece();
+  }
+  render();
+}
+
+function rotate() {
+  if (gameOver || achievementPaused) return;
+  let rotated = current.cells.map(([x,y]) => [y, -x]);
+  rotated = normalizeCells(rotated);
+
+  for (const kick of [0, -1, 1, -2, 2, -3, 3]) {
+    if (!collides(current.x + kick, current.y, rotated)) {
+      current.x += kick;
+      current.cells = rotated;
+      SFX.rotate();
+      render();
+      return;
+    }
+  }
+}
+
+function hardDrop() {
+  if (gameOver || achievementPaused) return;
+  while (!collides(current.x, current.y + 1, current.cells)) current.y++;
+  SFX.hardDrop();
+  lockPiece();
+  render();
+}
+
+function isCurrentCell(x, y) {
+  if (!current || gameOver) return false;
+  return current.cells.some(([cx, cy]) => current.x + cx === x && current.y + cy === y);
+}
+
+function selfHelp(x, y) {
+  if (gameOver || achievementPaused) return;
+  if (helps <= 0) {
+    flashHelp("もう自分は入りすぎです（残り0回）。");
+    setManager("もう体力ねえ…🥵");
+    return;
+  }
+  if (board[y][x] || isCurrentCell(x, y)) return; // 埋まっているマス・落下中ピースは無反応
+
+  board[y][x] = "店長";
+  totalCells += 1;
+  helps--;
+  score = Math.max(0, score - 50);
+  SFX.help();
+  setManager(pick(MANAGER_LINES.selfHelp));
+  if (helps <= 1) {
+    setTimeout(() => setManager(pick(MANAGER_LINES.lowHelps)), 1800);
+  }
+  clearFullRows();
+  flashHelp(`✅ ${dayLabel(y)} ${slots[x]} に自分が入りました（残り${helps}回）。`);
+  render();
+}
+
+function flashHelp(text) {
+  document.getElementById("helpMessage").textContent = text;
+}
+
+// ===== 会話演出 =====
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+let managerTimer;
+function setManager(text) {
+  const el = document.getElementById("managerText");
+  el.textContent = text;
+  clearTimeout(managerTimer);
+  // 8秒たったらランダムなぼやきに戻す
+  managerTimer = setTimeout(() => {
+    if (!gameOver) el.textContent = pick(MANAGER_LINES.ongoing);
+  }, 8000);
+}
+
+function speakPiece(name, emoji) {
+  const lines = PIECE_LINES[name] || ["……"];
+  const line = pick(lines);
+  pushBubble(emoji, name, line, false);
+  showCharPop(name, emoji, line);
+}
+
+let charPopTimer;
+function showCharPop(name, fallbackEmoji, line) {
+  const el = document.getElementById("charPop");
+  if (!el) return;
+  const path = PORTRAIT_BY_NAME[name];
+  const faceHtml = path
+    ? `<img class="face" src="${path}" alt="" onerror="this.outerHTML='<div class=&quot;fallbackFace&quot;>${fallbackEmoji}</div>'">`
+    : `<div class="fallbackFace">${fallbackEmoji}</div>`;
+  const lineHtml = String(line).replace(/\n/g, "<br>");
+  el.innerHTML = `${faceHtml}<div class="text"><div class="name">${name}</div><div class="line">${lineHtml}</div></div>`;
+  el.classList.remove("hide");
+  el.classList.add("show");
+  el.style.display = "block";
+  clearTimeout(charPopTimer);
+  charPopTimer = setTimeout(() => {
+    el.classList.remove("show");
+    el.classList.add("hide");
+    setTimeout(() => {
+      el.classList.remove("hide");
+      el.style.display = "none";
+    }, 520);
+  }, 1400);
+}
+
+function flashScoreFloat(text, x, y) {
+  const div = document.createElement("div");
+  div.className = "scoreFloat";
+  div.textContent = text;
+  div.style.left = (x || (window.innerWidth / 2 - 60)) + "px";
+  div.style.top  = (y || 200) + "px";
+  document.body.appendChild(div);
+  setTimeout(() => div.remove(), 1400);
+}
+
+// ライン消去時、消えた行で「一番コマ多い人」1人だけ顔ポップ + 店長の毒舌応答（独り言ボックスに）
+const MANAGER_RETORTS = {
+  "田中":  ["…って言いつつ毎週同じ言い訳だな", "テスト勉強、5年連続じゃないか?", "奨学金、お前のせいじゃないけど辛いな"],
+  "山田":  ["夫が単身赴任とか、本当か?", "子供の発熱、月3回はおかしい", "PTAの会長、押し付けて悪いとは思ってる"],
+  "佐藤":  ["お前、いつ寝てるんだ…", "親に正社員って嘘ついてる件、聞いたぞ", "ガス、もう自分で払えるようになれよ"],
+  "高橋":  ["腰、ほんとに大丈夫?今月3枚目の湿布…", "息子から連絡来ないの、辛いよな", "夫の介護施設、また脱走したらしいぞ"],
+  "渡辺":  ["彼女の数、もうこっちで把握できないぞ", "サラ金、自分で何とかしろよ…", "結婚式呼んでくれるんだろうな?(ご祝儀ない)"],
+  "店長":  ["…俺、店長手当より自分ヘルプ多くない?", "今夜も家に帰れないな", "妻にバレないように帰ろう"]
+};
+
+function cheerByTop(clearedTops) {
+  let delay = 0;
+  for (const r of clearedTops) {
+    if (!r.name) continue;
+    const banks = CLEAR_CHEER[r.name] || ["お疲れさまでした!"];
+    const line = pick(banks);
+    const emoji = (pieces.find(p => p.name === r.name)?.emoji) || (r.name === "店長" ? "🧑‍💼" : "🎉");
+    setTimeout(() => {
+      showCharPop(r.name, emoji, `${r.day}のMVP（${r.count}コマ）\n「${line}」`);
+      // 店長の毒舌応答 = 掛け合い
+      const retort = pick(MANAGER_RETORTS[r.name] || ["お疲れ…"]);
+      setTimeout(() => setManager(`店長(心)「${retort}」`), 800);
+    }, delay);
+    delay += 1700;
+  }
+}
+
+function iconHTML(name, fallbackEmoji) {
+  const path = PORTRAIT_BY_NAME[name];
+  if (path) {
+    // 画像読み込み失敗時は絵文字に差し替え
+    return `<span class="ico"><img src="${path}" alt="" onerror="this.parentNode.innerHTML='${fallbackEmoji}'"></span>`;
+  }
+  return `<span class="ico">${fallbackEmoji}</span>`;
+}
+
+function pushBubble(ico, name, text, cheerStyle) {
+  pushBubbleByName(name, ico, name, text, cheerStyle);
+}
+
+function pushBubbleByName(portraitName, fallbackEmoji, label, text, cheerStyle) {
+  const area = document.getElementById("bubbleArea");
+  const bub = document.createElement("div");
+  bub.className = "bubble" + (cheerStyle ? " cheer" : "");
+  bub.innerHTML = `${iconHTML(portraitName, fallbackEmoji)}<div class="name">${label}</div><div>${text}</div>`;
+  area.prepend(bub);
+  // 古い吹き出しは消す（3個まで保持）
+  while (area.children.length > 3) {
+    area.removeChild(area.lastChild);
+  }
+  setTimeout(() => {
+    bub.classList.add("fadeOut");
+    setTimeout(() => bub.remove(), 450);
+  }, 4200);
+}
+
+function showLineNotify() {
+  if (gameOver) return;
+  const stack = document.getElementById("lineStack");
+  const n = pick(LINE_NOTIFICATIONS);
+  const el = document.createElement("div");
+  el.className = "lineNotify";
+  const path = PORTRAIT_BY_NAME[n.who];
+  const ico = path
+    ? `<span class="lineIco"><img src="${path}" alt="" onerror="this.parentNode.innerHTML='💬'"></span>`
+    : `<span class="lineIco">💬</span>`;
+  el.innerHTML = `${ico}<div class="head">📱 LINE</div><div><span class="name">${n.who}</span>: ${n.msg}</div>`;
+  stack.appendChild(el);
+  SFX.lineNotify();
+  // 店長の反応を独り言に
+  setTimeout(() => setManager("…マジか。" + n.who + "から連絡来た…📱"), 200);
+  setTimeout(() => {
+    el.classList.add("fadeOut");
+    setTimeout(() => el.remove(), 550);
+  }, 4500);
+  scheduleNextLineNotify();
+}
+
+function scheduleNextLineNotify() {
+  clearTimeout(lineNotifyTimer);
+  // 12〜22秒に1回
+  const delay = 12000 + Math.random() * 10000;
+  lineNotifyTimer = setTimeout(showLineNotify, delay);
+}
+
+// 落下中に時々ぼやかせる
+let chatterTimer;
+function scheduleChatter() {
+  clearTimeout(chatterTimer);
+  chatterTimer = setTimeout(() => {
+    if (!gameOver) {
+      const el = document.getElementById("managerText");
+      // 直近セリフが既に setManager で出たばかりでなければ
+      if (!managerTimer || performance.now()) {
+        el.textContent = pick(MANAGER_LINES.ongoing);
+      }
+    }
+    scheduleChatter();
+  }, 9000 + Math.random() * 6000);
+}
+
+// ===== 動的難易度（3分タイマー） =====
+
+function difficultyTick() {
+  if (gameOver) return;
+  if (achievementPaused) return;     // 漫画中は時間も難易度も止める
+  const elapsed = performance.now() - gameStartedAt - totalPausedMs;
+  const t = Math.min(1, elapsed / GAME_DURATION_MS); // 0→1
+  // 落下速度: 900ms → 280ms
+  const newSpeed = Math.round(900 - (900 - 280) * t);
+  if (newSpeed !== fallSpeed) {
+    fallSpeed = newSpeed;
+    // 漫画モーダル中とゲームオーバー中はsetIntervalを起動しない
+    if (!achievementPaused && !gameOver) {
+      if (fallTimer) clearInterval(fallTimer);
+      fallTimer = setInterval(() => move(0, 1), fallSpeed);
+    }
+  }
+  // 落下タイマーが何らかで null になってる場合の救済（漫画閉じた直後の競合等）
+  if (!achievementPaused && !gameOver && !fallTimer) {
+    fallTimer = setInterval(() => move(0, 1), fallSpeed);
+  }
+  // 見える行: 14 → 7
+  const newVisible = Math.max(7, Math.round(14 - 7 * t));
+  if (newVisible !== visibleRows) {
+    visibleRows = newVisible;
+    // 縮んだ結果、ピースが天井に埋まったらゲームオーバー判定 → 強制ロック→spawn
+    if (current && collides(current.x, current.y, current.cells)) {
+      // 既存ピースを安全な位置に押し下げる
+      while (current.y < H && collides(current.x, current.y, current.cells)) current.y++;
+      if (current.y >= H) lockPiece();
+    }
+  }
+  // 残り時間表示更新
+  const remainMs = Math.max(0, GAME_DURATION_MS - elapsed);
+  const mm = Math.floor(remainMs / 60000);
+  const ss = Math.floor((remainMs % 60000) / 1000).toString().padStart(2, "0");
+  const timerEl = document.getElementById("timer");
+  if (timerEl) timerEl.textContent = `${mm}:${ss}`;
+  if (t >= 1) {
+    // 3分耐え抜いた → 「3分耐えた漫画」→「エンディング漫画」の順
+    showAchievementManga("survived_3min");
+    setTimeout(() => showAchievementManga("ending"), 200);
+  }
+  render();
+}
+
+// ===== ゲーム制御 =====
+
+function restart() {
+  board = emptyBoard();
+  score = 0;
+  lines = 0;
+  helps = HELPS_PER_WEEK;
+  lastResetWeek = 0;
+  gameOver = false;
+  startDay = 1;
+  visibleRows = ROWS;
+  fallSpeed = 900;
+  gameStartedAt = performance.now();
+  pauseStartedAt = 0;
+  totalPausedMs = 0;
+  nextBase = pickPiece();
+
+  clearInterval(fallTimer);
+  fallTimer = setInterval(() => move(0, 1), fallSpeed);
+  clearInterval(difficultyTimer);
+  difficultyTimer = setInterval(difficultyTick, 500);
+
+  flashHelp("");
+  document.getElementById("lineStack").innerHTML = "";
+  // charPop を強制クローズ
+  const cp = document.getElementById("charPop");
+  if (cp) { cp.style.display = "none"; cp.classList.remove("show","hide"); }
+  totalCells = 0;
+  // プロローグは初回1回限り、それ以外のアチーブはリセット
+  const seenPrologue = achievements.has("prologue");
+  achievements.clear();
+  if (seenPrologue) achievements.add("prologue");
+  achievementQueue.length = 0;
+  achievementPaused = false;
+  document.getElementById("achieveModal").classList.add("hide");
+  setManager(pick(MANAGER_LINES.start));
+  scheduleNextLineNotify();
+  scheduleChatter();
+  // ユーザー操作なしの初期起動時は audio が無い状態でも進む（初操作で bootstrap される）
+  if (audioCtx && !muted) {
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    stopBgm();
+    startBgm();
+  }
+  spawn();
+  render();
+}
+
+function render() {
+  const table = document.getElementById("board");
+  const overlay = new Map();
+  const ghost = new Map();
+  if (!gameOver && current) {
+    for (const [cx, cy] of current.cells) {
+      overlay.set(`${current.x + cx},${current.y + cy}`, current.mark);
+    }
+    // ゴースト位置（落下先プレビュー）
+    let gy = current.y;
+    while (!collides(current.x, gy + 1, current.cells)) gy++;
+    if (gy !== current.y) {
+      for (const [cx, cy] of current.cells) {
+        const key = `${current.x + cx},${gy + cy}`;
+        if (!overlay.has(key)) ghost.set(key, current.mark);
+      }
+    }
+  }
+
+  const topBlocked = topBlockedRows();
+  let html = "<tr><th></th>" + slots.map(s => `<th>${s}</th>`).join("") + "</tr>";
+  for (let y = 0; y < H; y++) {
+    const rowWeekend = isWeekendRow(y);
+    const isBlockedRow = y < topBlocked;
+    const dayTxt = isBlockedRow ? "—" : dayLabel(y);
+    html += `<tr><td class="time${rowWeekend ? " weekend" : ""}${isBlockedRow ? " blocked" : ""}">${dayTxt}</td>`;
+    for (let x = 0; x < W; x++) {
+      const key = `${x},${y}`;
+      const active = overlay.has(key);
+      const text = active ? overlay.get(key) : board[y][x];
+
+      let cls = "";
+      let displayText = text || "";
+      if (isBlockedRow) {
+        cls = "blocked";
+      } else if (active) {
+        cls = "active " + (NAME_TO_CSS[current.name] || "");
+      } else if (text === "店長") {
+        cls = "self " + NAME_TO_CSS["店長"];
+      } else if (text) {
+        const nm = MARK_TO_NAME[text];
+        cls = "filled " + (NAME_TO_CSS[nm] || "");
+      } else if (ghost.has(key)) {
+        cls = "ghost";
+        displayText = ghost.get(key);
+      } else if (!gameOver && helps > 0) {
+        cls = "helpTarget" + (rowWeekend ? " weekend" : "");
+      } else if (rowWeekend) {
+        cls = "weekend";
+      }
+
+      const click = isBlockedRow ? "" : `onclick="selfHelp(${x},${y})"`;
+      html += `<td class="${cls.trim()}" ${click}>${displayText}</td>`;
+    }
+    html += "</tr>";
+  }
+  table.innerHTML = html;
+
+  document.getElementById("score").textContent = score;
+  const linesEl = document.getElementById("lines");
+  if (linesEl) linesEl.textContent = lines;
+  const nextDayEl = document.getElementById("nextDay");
+  if (nextDayEl) nextDayEl.textContent = (startDay + ROWS);
+  document.getElementById("helps").textContent = helps;
+  const visEl = document.getElementById("visDays");
+  if (visEl) visEl.textContent = visibleRows;
+  // 状態チップ
+  const stateChip = document.getElementById("state");
+  if (stateChip) {
+    if (gameOver) {
+      stateChip.textContent = "🚫 閉店";
+      stateChip.classList.add("over");
+    } else {
+      stateChip.textContent = "営業中";
+      stateChip.classList.remove("over");
+    }
+  }
+  // 盤面オーバーレイ
+  const goBanner = document.getElementById("gameOverBanner");
+  if (goBanner) {
+    if (gameOver) goBanner.classList.add("show");
+    else goBanner.classList.remove("show");
+  }
+
+  // 人件費（時給1200円換算）
+  const yenTotal = totalCells * YEN_PER_CELL;
+  document.getElementById("yenTotal").textContent = "¥" + yenTotal.toLocaleString();
+  // 今のバイト・次の応募の表示は削除済み（盤面の落下中ピースで分かる）
+  document.getElementById("helps").className = (helps <= 1 && !gameOver) ? "warn" : "";
+}
+
+// タッチスワイプ操作（スマホ）: 横=移動 / 上=回転 / 下=即配置 / 短いタップ=selfHelp(onclick委譲)
+(function setupTouch() {
+  const board = document.getElementById("board");
+  let s = null;
+  board.addEventListener("touchstart", (e) => {
+    if (achievementPaused) return;
+    const t = e.changedTouches[0];
+    s = { x: t.clientX, y: t.clientY, time: Date.now() };
+  }, { passive: true });
+  board.addEventListener("touchend", (e) => {
+    if (!s) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+    const TH = 24;
+    s = null;
+    if (adx < TH && ady < TH) return; // タップは onclick (selfHelp) に任せる
+    e.preventDefault();
+    if (adx > ady) {
+      if (dx > TH) move(1, 0); else if (dx < -TH) move(-1, 0);
+    } else {
+      if (dy > TH * 2) hardDrop();
+      else if (dy > TH) move(0, 1);
+      else if (dy < -TH) rotate();
+    }
+  }, { passive: false });
+})();
+
+document.addEventListener("keydown", (e) => {
+  // 漫画表示中はナビゲーション・スキップのみ受け付け、ゲーム操作を無効化
+  if (achievementPaused) {
+    if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      nextPanel();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      prevPanel();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      // スキップ＝残りのパネルを飛ばしてモーダル閉じる
+      amState.idx = amState.panels.length - 1;
+      closeAchievementModal();
+    }
+    return;
+  }
+  if (e.key === "ArrowLeft") move(-1,0);
+  if (e.key === "ArrowRight") move(1,0);
+  if (e.key === "ArrowDown") move(0,1);
+  if (e.key === "ArrowUp" || e.key === " ") {
+    e.preventDefault();
+    rotate();
+  }
+  if (e.key === "Enter") hardDrop();
+  if (e.key.toLowerCase() === "r") restart();
+});
+
+// ルールモーダル制御
+let gameStarted = false;
+function closeRuleModal() {
+  const m = document.getElementById("ruleModal");
+  if (m) m.classList.add("hide");
+  if (!gameStarted) {
+    gameStarted = true;
+    restart();
+  } else if (gameOver) {
+    restart();
+  }
+  bootstrapAudioOnce();
+}
+function openRuleModal() {
+  const m = document.getElementById("ruleModal");
+  if (m) m.classList.remove("hide");
+}
+
+// 初回ロード: プロローグ漫画 → ルールモーダル → ゲーム開始 の順
+board = emptyBoard();
+render();
+document.getElementById("ruleModal").classList.add("hide");
+showAchievementManga("prologue");
+</script>
+</body>
+</html>
