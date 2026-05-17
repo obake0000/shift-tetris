@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://obake0000.github.io/shift-tetris/sitemap.xml
